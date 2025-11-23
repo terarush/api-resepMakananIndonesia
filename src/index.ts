@@ -16,7 +16,9 @@ import {
 
 const app = new Hono();
 
-// router utama //
+// ===================================
+// Router Utama
+// ===================================
 
 // root
 app.get("/", (c) => {
@@ -37,7 +39,7 @@ app.get("/docs/spec", (c) => {
 });
 
 // mengambil daftar semua resep
-app.get("api/v1/resep", (c) => {
+app.get("/api/v1/resep", (c) => {
   const { kategori, sort_by } = c.req.query();
   let data: Resep[] = [...RESEP_LIST];
 
@@ -53,26 +55,6 @@ app.get("api/v1/resep", (c) => {
     count: data.length,
     message: `total length: ${RESEP_LIST.length}. result: ${data.length}`,
     data: data.slice(0, 20),
-  };
-  return c.json(response);
-});
-
-// mengambil resep berdasarkan id
-app.get("/api/v1/resep/:id", (c) => {
-  const id = c.req.param("id");
-  const resep = RESEP_LIST.find((r) => r.id === id);
-  if (!resep) {
-    const response: ApiResponse<null> = {
-      success: false,
-      message: `resep not found by id ${id}.`,
-    };
-    return c.json(response, 404);
-  }
-
-  const response: ApiResponse<Resep> = {
-    success: true,
-    message: `resep found by id ${id}.`,
-    data: resep,
   };
   return c.json(response);
 });
@@ -154,6 +136,47 @@ app.get("/api/v1/resep/populer", (c) => {
   return c.json(response);
 });
 
+// filter resep with multiple criteria
+app.post("/api/v1/resep/filter", async (c) => {
+  const body = await c.req.json();
+  const { kategori, bahan, minSuka } = body;
+
+  const criteria: { kategori?: string; bahan?: string; minSuka?: number } = {};
+  if (kategori) criteria.kategori = kategori;
+  if (bahan) criteria.bahan = bahan;
+  if (minSuka !== undefined) criteria.minSuka = minSuka;
+
+  const result = filterRecipes(RESEP_LIST, criteria);
+
+  const response: ApiResponse<Resep[]> = {
+    success: true,
+    count: result.length,
+    message: "Recipes filtered by criteria.",
+    data: result.slice(0, 50), // Limit to 50 results
+  };
+  return c.json(response);
+});
+
+// mengambil resep berdasarkan id
+app.get("/api/v1/resep/:id", (c) => {
+  const id = c.req.param("id");
+  const resep = RESEP_LIST.find((r) => r.id === id);
+  if (!resep) {
+    const response: ApiResponse<null> = {
+      success: false,
+      message: `resep not found by id ${id}.`,
+    };
+    return c.json(response, 404);
+  }
+
+  const response: ApiResponse<Resep> = {
+    success: true,
+    message: `resep found by id ${id}.`,
+    data: resep,
+  };
+  return c.json(response);
+});
+
 // get all kategori
 app.get("/api/v1/kategori", (c) => {
   const result = getAllCategories(RESEP_LIST);
@@ -179,33 +202,26 @@ app.get("/api/v1/stats", (c) => {
   return c.json(response);
 });
 
-// filter resep with multiple criteria
-app.post("/api/v1/resep/filter", async (c) => {
-  const body = await c.req.json();
-  const { kategori, bahan, minSuka } = body;
 
-  const criteria: { kategori?: string; bahan?: string; minSuka?: number } = {};
-  if (kategori) criteria.kategori = kategori;
-  if (bahan) criteria.bahan = bahan;
-  if (minSuka !== undefined) criteria.minSuka = minSuka;
+/**
+ *
+ * Di Vercel (atau environment serverless lainnya), Anda tidak perlu menggunakan serve().
+ * Anda hanya perlu mengekspor objek 'app' (handler Hono) agar Vercel dapat menggunakannya
+ * untuk merespons request HTTP yang masuk.
+ *
+ * Kode 'serve' hanya digunakan untuk menjalankan server secara lokal.
+ * Saya menggunakan kondisi untuk memisahkan logika lokal dan serverless.
+ */
+if (process.env.NODE_ENV === "development") {
+  serve(
+    {
+      fetch: app.fetch,
+      port: 3000,
+    },
+    (info) => {
+      console.log(`Server is running on http://localhost:${info.port}`);
+    }
+  );
+}
 
-  const result = filterRecipes(RESEP_LIST, criteria);
-
-  const response: ApiResponse<Resep[]> = {
-    success: true,
-    count: result.length,
-    message: "Recipes filtered by criteria.",
-    data: result.slice(0, 50), // Limit to 50 results
-  };
-  return c.json(response);
-});
-
-serve(
-  {
-    fetch: app.fetch,
-    port: 3000,
-  },
-  (info) => {
-    console.log(`Server is running on http://localhost:${info.port}`);
-  }
-);
+export default app;
